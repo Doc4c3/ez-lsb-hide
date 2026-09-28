@@ -48,7 +48,9 @@ CTF / 隐写术学习者。拖入图片 → 输入信息 → 选择通道与位�
 
 ```
 lsb-gui-tool/
-├── lsb_gui.py        # 单文件应用（GUI + LSB 嵌入逻辑）
+├── lsb_core.py       # 纯函数：载荷打包、容量计算、嵌入、测试用提取
+├── lsb_gui.py        # Tkinter GUI（四元素），调用 lsb_core
+├── tests/test_lsb_core.py  # unittest 单元测试
 ├── requirements.txt  # pillow, tkinterdnd2, pyinstaller
 ├── build_exe.bat     # 打包脚本
 └── docs/superpowers/specs/2026-03-08-lsb-gui-tool-design.md
