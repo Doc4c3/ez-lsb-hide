@@ -90,6 +90,29 @@ class TestRoundTrip(unittest.TestCase):
         lsb_core.embed(src, out, "ok", {"A"}, {0})
         self.assertEqual(lsb_core.extract(out, {"A"}, {0}), "ok")
 
+    def test_extract_clean_image_raises(self):
+        # 纯白图：bit0 全为 1 → 头部读出 0xFFFFFFFF，远超容量 → 判定无嵌入数据
+        src = os.path.join(self.dir, "clean.png")
+        Image.new("RGB", (8, 8), (255, 255, 255)).save(src)
+        with self.assertRaises(ValueError) as ctx:
+            lsb_core.extract(src, {"R", "G", "B"}, {0})
+        self.assertIn("未检测到嵌入数据", str(ctx.exception))
+
+    def test_grayscale_capacity_matches_embed(self):
+        # L 模式图：embed 会归一化为 RGB，capacity_bytes 应同样归一化
+        src = self._make("RGB", size=(4, 4))
+        out = os.path.join(self.dir, "out.png")
+        lsb_core.embed(src, out, "hi", {"R", "G", "B"}, {0})
+        gray = os.path.join(self.dir, "gray.png")
+        Image.new("L", (4, 4), 128).save(gray)
+        with Image.open(gray) as img:
+            cap = lsb_core.capacity_bytes(img, {"R", "G", "B"}, {0})
+        # 归一化后应与 4x4 RGB 一致：2 字节，且确实能嵌入
+        self.assertEqual(cap, 2)
+        gout = os.path.join(self.dir, "gray_out.png")
+        lsb_core.embed(gray, gout, "hi", {"R", "G", "B"}, {0})
+        self.assertEqual(lsb_core.extract(gout, {"R", "G", "B"}, {0}), "hi")
+
     def test_unselected_channels_untouched(self):
         src = self._make("RGB", size=(8, 8), color=(100, 100, 100, 255))
         out = os.path.join(self.dir, "out.png")

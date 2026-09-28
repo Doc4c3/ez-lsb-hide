@@ -14,12 +14,19 @@ def build_payload(message: str) -> list[int]:
     return bits
 
 
+def _normalize(img: Image.Image) -> Image.Image:
+    if img.mode in ("RGB", "RGBA"):
+        return img
+    return img.convert("RGBA" if "A" in img.getbands() else "RGB")
+
+
 def _usable_channels(img: Image.Image, channels: set[str]) -> list[str]:
     bands = set(img.getbands())
     return [c for c in _CHANNEL_ORDER if c in channels and c in bands]
 
 
 def capacity_bits(img: Image.Image, channels: set[str], planes: set[int]) -> int:
+    img = _normalize(img)
     usable = _usable_channels(img, channels)
     return img.width * img.height * len(usable) * len(planes)
 
@@ -38,9 +45,7 @@ def _write_positions(img: Image.Image, channels: set[str], planes: set[int]):
 
 def embed(input_path: str, output_path: str, message: str,
           channels: set[str], planes: set[int]) -> None:
-    img = Image.open(input_path)
-    if img.mode not in ("RGB", "RGBA"):
-        img = img.convert("RGBA" if "A" in img.getbands() else "RGB")
+    img = _normalize(Image.open(input_path))
     bits = build_payload(message)
     total = capacity_bits(img, channels, planes)
     if len(bits) > total:
@@ -80,13 +85,19 @@ def extract(input_path: str, channels: set[str], planes: set[int]) -> str:
                     yield (pixel[band] >> plane) & 1
 
     stream = bit_stream()
-    header = 0
-    for _ in range(_HEADER_BITS):
-        header = (header << 1) | next(stream)
-    data = bytearray()
-    for _ in range(header):
-        byte = 0
-        for _ in range(8):
-            byte = (byte << 1) | next(stream)
-        data.append(byte)
+    try:
+        header = 0
+        for _ in range(_HEADER_BITS):
+            header = (header << 1) | next(stream)
+        max_bytes = max(0, (capacity_bits(img, channels, planes) - _HEADER_BITS) // 8)
+        if header > max_bytes:
+            raise ValueError("未检测到嵌入数据")
+        data = bytearray()
+        for _ in range(header):
+            byte = 0
+            for _ in range(8):
+                byte = (byte << 1) | next(stream)
+            data.append(byte)
+    except StopIteration:
+        raise ValueError("未检测到嵌入数据或数据不完整") from None
     return bytes(data).decode("utf-8")
